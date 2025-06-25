@@ -1,19 +1,39 @@
 import cv2
 import numpy as np
+import streamlit as st
+import matplotlib.pyplot as plt
+import io
 from scipy import ndimage
 from PIL import Image
 
+
+st.set_page_config(page_title="Nano-Particle Detector", layout="wide")
+st.title("Interactive Nano-Particle Detection")
+
 # Load image with PIL for cropping
-image_path = '/Users/prashansapkota/Documents/7-1-24 LT 5 hr 90kx15.tif'
-im_pil = Image.open(image_path)
+uploaded = st.file_uploader("Upload a microscopy image", type= ["tiff", "tif", "png", "jpg", "jpeg"])
+if not uploaded: 
+    st.info("Please upload image to get started.")
+    st.stop
+
+im_pil = Image.open(uploaded)
 
 # Crop the image (left, top, right, bottom)
 width, height = im_pil.size
-crop_area = (0, 0, width, height - 100)
-im_pil = im_pil.crop(crop_area)
+CROP_PIXELS = 100
+im_pil_cropped = im_pil.crop((0, 0, width, height - CROP_PIXELS))
+
+# Display cropped image
+#st.image(im_pil_cropped, caption="Uploaded Image", use_container_width=True)
+
+# Parameters: Block Size and C for adaptive threshold
+block_slider = st.slider('Block Size', 0, 10, 0, help="Controls local thresholding area. Final value: 2*value+3 (odd numbers only).")
+c_slider = st.slider('Constant (C)', 0, 40, 0, help="Controls offset for adaptive threshold. Range: -20 to 20.")
+block_size = 2 * block_slider + 3
+C = c_slider - 20
 
 # Convert to OpenCV format (numpy array, BGR)
-im = np.array(im_pil)
+im = np.array(im_pil_cropped)
 if len(im.shape) == 2:
     im = cv2.cvtColor(im, cv2.COLOR_GRAY2BGR)
 else:
@@ -22,57 +42,71 @@ else:
 gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
 gray = cv2.GaussianBlur(gray, (5, 5), 0)
 
-cv2.namedWindow('Filtered Particles')
-cv2.namedWindow('Original Image')
+# Adaptive threshold and filtering
+adaptive_thresh = cv2.adaptiveThreshold(
+    gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block_size, C
+)
 
-# --- Sliders: both start at 0 ---
-cv2.createTrackbar('Block Size', 'Filtered Particles', 0, 10, lambda x: None)  # block_size: 3 to 51
-cv2.createTrackbar('C', 'Filtered Particles', 0, 40, lambda x: None)           # C: -20 to +20
+kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+cleaned = cv2.morphologyEx(adaptive_thresh, cv2.MORPH_OPEN, kernel)
 
-while True:
-    block_slider = cv2.getTrackbarPos('Block Size', 'Filtered Particles')
-    c_slider = cv2.getTrackbarPos('C', 'Filtered Particles')
+# Particle Labeling and area filtering
+labelarray, num_features = ndimage.label(cleaned)
+sizes = ndimage.sum(cleaned, labelarray, range(1, num_features + 1))
 
-    block_size = 2 * block_slider + 3      # block_size always odd, starts at 3
-    C = c_slider - 20                      # C goes from -20 to +20
+min_area = 20
+mask = np.zeros_like(cleaned)
 
-    adaptive_thresh = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block_size, C
-    )
+for i, size in enumerate(sizes):
+    if size > min_area:
+        mask[labelarray == i + 1] = 255
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    cleaned = cv2.morphologyEx(adaptive_thresh, cv2.MORPH_OPEN, kernel)
+label_filtered, final_particle_count = ndimage.label(mask)
 
-    labelarray, num_features = ndimage.label(cleaned)
-    sizes = ndimage.sum(cleaned, labelarray, range(1, num_features + 1))
+display = im.copy()
+centroids = ndimage.center_of_mass(mask, label_filtered, range(1, final_particle_count + 1))
 
-    min_area = 20
-    mask = np.zeros_like(cleaned)
+particle_centers = []
+for center in centroids:
+    if not np.isnan(center[0]) and not np.isnan(center[1]):
+        y, x = int(center[0]), int(center[1])
+        cv2.circle(display, (x, y), 5, (0, 255, 0), 2)
+        particle_centers.append((y,x))
 
-    for i, size in enumerate(sizes):
-        if size > min_area:
-            mask[labelarray == i + 1] = 255
+text = f'Particles Detected: {final_particle_count}'
+cv2.putText(display, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
-    label_filtered, final_particle_count = ndimage.label(mask)
+# Show results
+col1, col2 = st.columns(2)
 
-    display = im.copy()
-    centroids = ndimage.center_of_mass(mask, label_filtered, range(1, final_particle_count + 1))
+with col1:
+    st.image(im_pil_cropped, caption="Original (Cropped) Image", use_container_width=True)
 
-    for center in centroids:
-        if not np.isnan(center[0]) and not np.isnan(center[1]):
-            cv2.circle(display, (int(center[1]), int(center[0])), 5, (0, 255, 0), 2)
+with col2:
+    st.image(display, channels="BGR", caption="Particles Detected", use_container_width=True)
+st.write(text)
 
-    text = f'Particles Detected: {final_particle_count}'
-    cv2.putText(display, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+# Download button for the annotated image
+display_rgb = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
+display_pil = Image.fromarray(display_rgb)
+buf = io.BytesIO()
+display_pil.save(buf, format='PNG')
+byte_im = buf.getvalue()
+st.download_button("Download Annotated Image", data=byte_im, file_name="particles_annotated.png", mime="image/png")
 
-    cv2.imshow('Filtered Particles', display)
-    cv2.imshow('Original Image', gray)  # Show original grayscale
-
-    print(f'Particles: {final_particle_count}, Block Size: {block_size}, C: {C}', end='\r')
-
-    key = cv2.waitKey(100)
-    if key == 27:
-        break
-
-cv2.destroyAllWindows()
-
+# Calculate & plot histogram of pairwise centroid distances
+if len(particle_centers) >= 2:
+    coords = np.array(particle_centers)
+    dists = []
+    for i in range(len(coords)):
+        for j in range(i+1, len(coords)):
+            d = np.linalg.norm(coords[i] - coords[j])
+            dists.append(d)
+    fig, ax = plt.subplots()
+    ax.hist(dists, bins=30)
+    ax.set_title("Histogram of Particle-Particle Distances")
+    ax.set_xlabel("Pixel Distance")
+    ax.set_ylabel("Count")
+    st.pyplot(fig)
+else:
+    st.info("Not enough particles to compute distance histogram.")
