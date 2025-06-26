@@ -103,6 +103,7 @@ if uploaded is not None:
     )
 
     # Calculate & plot histogram of pairwise centroid distances
+
     if len(particle_centers) >= 2:
         coords = np.array(particle_centers)
         dists = []
@@ -110,13 +111,27 @@ if uploaded is not None:
             for j in range(i+1, len(coords)):
                 d = np.linalg.norm(coords[i] - coords[j])
                 dists.append(d)
-        fig, ax = plt.subplots()
-        ax.hist(dists, bins=30)
-        ax.set_title("Histogram of Particle-Particle Distances")
-        ax.set_xlabel("Pixel Distance")
-        ax.set_ylabel("Count")
+
+        plt.style.use("seaborn-v0_8-whitegrid")
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        n, bins, patches = ax.hist(
+            dists,
+            bins=30,
+            edgecolor="black",
+            alpha=0.8
+        )
+
+        # Set titles and labels with larger fonts
+        ax.set_title("Histogram of Pairwise Particle Distances", fontsize=16, fontweight='bold')
+        ax.set_xlabel("Distance Between Particles (pixels)", fontsize=13)
+        ax.set_ylabel("Number of Particle Pairs", fontsize=13)
+        ax.tick_params(axis='both', which='major', labelsize=11)
+
+        ax.legend(fontsize=11)
+        fig.tight_layout()
+
         st.pyplot(fig)
     else:
         st.info("Not enough particles to compute distance histogram.")
-else: 
-    st.info("Please upload an image to get started.")
+
