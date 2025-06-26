@@ -132,6 +132,19 @@ if uploaded is not None:
         fig.tight_layout()
 
         st.pyplot(fig)
+        
+        # Download the histogram button
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", bbox_inches='tight')
+        buf.seek(0)
+
+        st.download_button(
+            label="Download Histogram",
+            data=buf,
+            file_name="particle_distance_histogram.png",
+            mime="image/png"
+        )
+
     else:
         st.info("Not enough particles to compute distance histogram.")
 
