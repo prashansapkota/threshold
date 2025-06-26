@@ -21,9 +21,6 @@ if uploaded is not None:
     CROP_PIXELS = 100
     im_pil_cropped = im_pil.crop((0, 0, width, height - CROP_PIXELS))
 
-    # Display cropped image
-    #st.image(im_pil_cropped, caption="Uploaded Image", use_container_width=True)
-
     # Parameters: Block Size and C for adaptive threshold
     block_slider = st.slider('Block Size', 0, 10, 0, help="Controls local thresholding area. Final value: 2*value+3 (odd numbers only).")
     c_slider = st.slider('Constant (C)', 0, 40, 0, help="Controls offset for adaptive threshold. Range: -20 to 20.")
