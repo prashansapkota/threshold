@@ -124,7 +124,7 @@ if uploaded is not None:
 
         # Set titles and labels with larger fonts
         ax.set_title("Histogram of Pairwise Particle Distances", fontsize=16, fontweight='bold')
-        ax.set_xlabel("Distance Between Particles (pixels)", fontsize=13)
+        ax.set_xlabel("Distance Between Particles", fontsize=13)
         ax.set_ylabel("Number of Particle Pairs", fontsize=13)
         ax.tick_params(axis='both', which='major', labelsize=11)
 
